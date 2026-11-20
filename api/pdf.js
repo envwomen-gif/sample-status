@@ -35,24 +35,25 @@ module.exports = async (req, res) => {
   const Y = top => H - top;                                    // top-based y (as pdftotext) -> PDF y
 
   // ---- page 1 header box: the QR replaces the printed "JC No / No of Colors" lines (box x 430.8-558, top 30.6-78.6) ----
-  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 1, scale: 12, type: 'png' });
+  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 0, scale: 12, type: 'png' });
   const img = await doc.embedPng(png);
-  const bx = 430.8, bw = 127.2, btop = 30.6, bh = 114;       // box redrawn taller: QR on top, the two numbers below it
-  p1.drawRectangle({ x: bx - 1, y: Y(btop + 50), width: bw + 2, height: 50, color: rgb(1, 1, 1) });   // wipe the printed box (30.6-78.6) and its lines
-  p1.drawRectangle({ x: bx, y: Y(btop + bh), width: bw, height: bh, borderColor: ink, borderWidth: 0.72, color: rgb(1, 1, 1) });
-  const qs = 68;
-  p1.drawImage(img, { x: bx + (bw - qs) / 2, y: Y(btop + 4 + qs), width: qs, height: qs });
+  const bx = 430.8, bw = 127.2, btop = 30.6;                  // printed box = x430.8-558, top 30.6-78.6
+  p1.drawRectangle({ x: bx - 1, y: Y(btop + 50), width: bw + 2, height: 52, color: rgb(1, 1, 1) });   // wipe the printed box and its lines
+  const bs = 70;                                               // new box = the QR frame (square)
+  p1.drawRectangle({ x: bx, y: Y(btop + bs), width: bs, height: bs, borderColor: ink, borderWidth: 0.72, color: rgb(1, 1, 1) });
+  p1.drawImage(img, { x: bx + 5, y: Y(btop + bs - 5), width: bs - 10, height: bs - 10 });
 
-  // ---- label + bold underlined value, one line each, under the QR ----
-  const field = (label, value, top) => {
-    const size = 9.5, bl = Y(btop + top), x = bx + 7, end = bx + bw - 7;
-    p1.drawText(label, { x, y: bl, size, font: cal, color: ink });
-    const lx = x + cal.widthOfTextAtSize(label, size) + 4;
-    if (value) p1.drawText(String(value), { x: lx + 3, y: bl + 0.5, size: 11, font: helB, color: ink });
-    p1.drawLine({ start: { x: lx, y: bl - 1.8 }, end: { x: end, y: bl - 1.8 }, thickness: 1, color: ink });
-  };
-  field('Sample Card No', jc, 88);
-  field('No of Colors', blank ? '' : String(rows.length), 105);
+  // ---- Sample Card No: label + bold underlined value, right of the QR box ----
+  const sx = bx + bs + 7, sw = bx + bw - sx;
+  p1.drawText('Sample Card No', { x: sx, y: Y(btop + 24), size: 7.6, font: cal, color: ink });
+  p1.drawText(jc, { x: sx + 1, y: Y(btop + 40) + 1, size: 12, font: helB, color: ink });
+  p1.drawLine({ start: { x: sx, y: Y(btop + 40) }, end: { x: sx + sw, y: Y(btop + 40) }, thickness: 1, color: ink });
+
+  // ---- No of Colors: below the box ----
+  const ny = Y(btop + bs + 18), nl = 'No of Colors', nlw = cal.widthOfTextAtSize(nl, 9.5);
+  p1.drawText(nl, { x: bx, y: ny, size: 9.5, font: cal, color: ink });
+  if (!blank) p1.drawText(String(rows.length), { x: bx + nlw + 8, y: ny + 0.5, size: 11, font: helB, color: ink });
+  p1.drawLine({ start: { x: bx + nlw + 4, y: ny - 1.8 }, end: { x: bx + bw, y: ny - 1.8 }, thickness: 1, color: ink });
 
   // ---- page 2: "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
   const relabel = (page, x0, x1, y0, y1, fs, lineEnd, value) => {
