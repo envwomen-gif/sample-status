@@ -2,6 +2,7 @@
 //  - the QR in the header box (scan opens /<JC> on this site) with Sample Card No and No of Colors below it,
 //  - the page 2 label "JC No" renamed "Sample Card No",
 //  - FABRIC INFORMATION only, typed from the SAMPLE MASTER rows of this card (no spec, process or cost values).
+// Colour name and colour no are not printed (they live in the sheet only).
 // Everything else on the form stays blank for people to write by hand.
 // /pdf/<JC>?blank=1 prints the form with the QR and number only.
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
@@ -87,8 +88,6 @@ module.exports = async (req, res) => {
     put(g('Fabric Vendor'), 112, 105.3, 300);
     put(g('Fabric Design No'), 112, 128.3, 92);
     put(g('Fabric Quality'), 260, 128.3, 116);
-    put(uniq(rows.map(r => r['Fabric Colour Name'])).join(' / '), 112, 151.3, 92);
-    put(uniq(rows.map(r => r['Fabric Colour No'])).join(' / '), 260, 151.3, 116);
 
     // fabric table: [row centre, key prefix, unit key, unit word boxes]
     const COL = { type: 209.5, quality: 254, width: 299.5, mtr: 340.4, rate: 383.1 };
