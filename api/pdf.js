@@ -1,6 +1,6 @@
 // Sampling card for one Sample Card No: the original COST BREAKUP v6 PDF, unchanged, plus
-//  - the QR and number (scan opens /<JC> on this site),
-//  - the printed label "JC No" renamed "Sample Card No",
+//  - the QR in the header box (scan opens /<JC> on this site) with Sample Card No and No of Colors below it,
+//  - the page 2 label "JC No" renamed "Sample Card No",
 //  - FABRIC INFORMATION only, typed from the SAMPLE MASTER rows of this card (no spec, process or cost values).
 // Everything else on the form stays blank for people to write by hand.
 // /pdf/<JC>?blank=1 prints the form with the QR and number only.
@@ -33,16 +33,26 @@ module.exports = async (req, res) => {
   const ink = rgb(0, 0, 0);
   const Y = top => H - top;                                    // top-based y (as pdftotext) -> PDF y
 
-  // ---- QR + number ----
-  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 1, scale: 12, type: 'png' });
+  // ---- page 1 header box: the QR replaces the printed "JC No / No of Colors" lines (box x 430.8-558, top 30.6-78.6) ----
+  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'L', margin: 0, scale: 16, type: 'png' });
   const img = await doc.embedPng(png);
-  const qx = 392, qtop = 84, qs = 66;
-  p1.drawImage(img, { x: qx, y: Y(qtop + qs), width: qs, height: qs });
-  p1.drawText('Scan: live sample', { x: qx + qs + 5, y: Y(qtop + 10), size: 6.5, font: hel });
-  p1.drawText('status', { x: qx + qs + 5, y: Y(qtop + 18), size: 6.5, font: hel });
-  p1.drawText(jc, { x: qx + qs + 5, y: Y(qtop + 40), size: 13, font: helB });
+  const bx = 430.8, bw = 127.2, btop = 30.6, bh = 48;
+  p1.drawRectangle({ x: bx + 1, y: Y(btop + bh) + 1, width: bw - 2, height: bh - 2, color: rgb(1, 1, 1) });
+  const qs = 42;
+  p1.drawImage(img, { x: bx + (bw - qs) / 2, y: Y(btop + (bh + qs) / 2), width: qs, height: qs });
 
-  // ---- "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
+  // ---- Sample Card No and No of Colors under the box: label + bold underlined value ----
+  const field = (label, value, top) => {
+    const size = 10.5, base = Y(top), x = bx;
+    p1.drawText(label, { x, y: base, size, font: cal, color: ink });
+    const lw = cal.widthOfTextAtSize(label, size) + 5, vw = Math.max(helB.widthOfTextAtSize(String(value || ''), 11.5), 44);
+    if (value) p1.drawText(String(value), { x: x + lw + 2, y: base, size: 11.5, font: helB, color: ink });
+    p1.drawLine({ start: { x: x + lw, y: base - 2 }, end: { x: x + lw + vw + 4, y: base - 2 }, thickness: 1, color: ink });
+  };
+  field('Sample Card No', jc, 96);
+  field('No of Colors', blank ? '' : String(rows.length), 114);
+
+  // ---- page 2: "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
   const relabel = (page, x0, x1, y0, y1, fs, lineEnd, value) => {
     const base = H - (y0 + 0.8 * (y1 - y0));
     page.drawRectangle({ x: x0 - 1.5, y: H - y1 - 1.5, width: x1 - x0 + 3, height: y1 - y0 + 3, color: rgb(1, 1, 1) });
@@ -51,7 +61,6 @@ module.exports = async (req, res) => {
     page.drawLine({ start: { x: x0 + w + 1, y: base - 1.2 }, end: { x: lineEnd, y: base - 1.2 }, thickness: 0.45, color: ink });
     if (value) page.drawText(value, { x: x0 + w + 4, y: base + 0.6, size: fs - 0.8, font: helB, color: ink });
   };
-  relabel(p1, 438.34, 545.3, 34.5, 47.5, 10.3, 549, jc);
   relabel(doc.getPage(1), 443.86, 508.0, 64.05, 74.6, 9.0, 534.3, jc);
 
   if (!blank) {
@@ -73,7 +82,6 @@ module.exports = async (req, res) => {
 
     // header
     const d = g('Recd Date'); put(d, 118, 42.4, 40, { size: 9 });
-    const ncol = rows.length; put(String(ncol), 497, 63.3, 50, { size: 9 });
 
     // vendor block
     put(g('Fabric Vendor'), 112, 105.3, 300);
