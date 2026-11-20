@@ -1,35 +1,131 @@
-// Prints the blank sampling card (original PDF, unchanged) with a QR that opens /<JC> on this site.
+// Sampling card for one Sample Card No: the original COST BREAKUP v6 PDF, unchanged, plus
+//  - the QR and number (scan opens /<JC> on this site),
+//  - the printed label "JC No" renamed "Sample Card No",
+//  - FABRIC INFORMATION only, typed from the SAMPLE MASTER rows of this card (no spec, process or cost values).
+// Everything else on the form stays blank for people to write by hand.
+// /pdf/<JC>?blank=1 prints the form with the QR and number only.
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const QR = require('qrcode');
 const fontkit = require('@pdf-lib/fontkit');
 const fs = require('fs'); const path = require('path');
+const { rowsForJc } = require('../lib/sheet');
+
+const bad = (res, code, msg) => { res.statusCode = code; res.setHeader('content-type', 'text/plain; charset=utf-8'); res.end(msg); };
+const uniq = a => [...new Set(a.map(s => String(s ?? '').trim()).filter(Boolean))];
+
 module.exports = async (req, res) => {
   const u = new URL(req.url, 'http://x'); const jc = (u.searchParams.get('jc') || '').trim().toUpperCase();
-  if (!/^[A-Z0-9-]{1,20}$/.test(jc)) { res.statusCode = 400; return res.end('Bad JC number'); }
+  const blank = u.searchParams.get('blank') === '1';
+  if (!/^[A-Z0-9-]{1,20}$/.test(jc)) return bad(res, 400, 'Bad Sample Card No');
+  let rows = [];
+  if (!blank) {
+    try { rows = await rowsForJc(jc); } catch (e) { return bad(res, 502, 'Cannot read the sample sheet now. Try again.'); }
+    if (!rows.length) return bad(res, 404, `No sample found for ${jc}. Save it in the sample form first.`);
+  }
   const proto = req.headers['x-forwarded-proto'] || 'https'; const host = req.headers['x-forwarded-host'] || req.headers.host;
   const base = process.env.PUBLIC_BASE_URL || `${proto}://${host}`;
+
   const doc = await PDFDocument.load(fs.readFileSync(path.join(process.cwd(), 'assets', 'cost-breakup-v6.pdf')));
-  const p1 = doc.getPage(0); const H = p1.getHeight();
-  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 1, scale: 12, type: 'png' });
   doc.registerFontkit(fontkit);
   const cal = await doc.embedFont(fs.readFileSync(path.join(process.cwd(), 'assets', 'Caladea-Regular.ttf')), { subset: true });
-  const img = await doc.embedPng(png); const f = await doc.embedFont(StandardFonts.Helvetica), fb = await doc.embedFont(StandardFonts.HelveticaBold);
-  const x = 392, top = 84, size = 66;
-  p1.drawImage(img, { x, y: H - top - size, width: size, height: size });
-  p1.drawText('Scan: live sample', { x: x + size + 5, y: H - top - 10, size: 6.5, font: f, color: rgb(0, 0, 0) });
-  p1.drawText('status', { x: x + size + 5, y: H - top - 18, size: 6.5, font: f });
-  p1.drawText(jc, { x: x + size + 5, y: H - top - 40, size: 13, font: fb });
-  // Printed label "JC No" becomes "Sample Card No" (white patch over the old text, same line style).
-  const relabel = (page, x0, x1, y0, y1, fs, lineEnd) => {
-    const Hh = page.getHeight(); const base = Hh - (y0 + 0.8 * (y1 - y0));
-    page.drawRectangle({ x: x0 - 1.5, y: Hh - y1 - 1.5, width: x1 - x0 + 3, height: y1 - y0 + 3, color: rgb(1, 1, 1) });
-    page.drawText('Sample Card No', { x: x0, y: base, size: fs, font: cal, color: rgb(0, 0, 0) });
+  const hel = await doc.embedFont(StandardFonts.Helvetica), helB = await doc.embedFont(StandardFonts.HelveticaBold);
+  const p1 = doc.getPage(0), H = p1.getHeight();
+  const ink = rgb(0, 0, 0);
+  const Y = top => H - top;                                    // top-based y (as pdftotext) -> PDF y
+
+  // ---- QR + number ----
+  const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 1, scale: 12, type: 'png' });
+  const img = await doc.embedPng(png);
+  const qx = 392, qtop = 84, qs = 66;
+  p1.drawImage(img, { x: qx, y: Y(qtop + qs), width: qs, height: qs });
+  p1.drawText('Scan: live sample', { x: qx + qs + 5, y: Y(qtop + 10), size: 6.5, font: hel });
+  p1.drawText('status', { x: qx + qs + 5, y: Y(qtop + 18), size: 6.5, font: hel });
+  p1.drawText(jc, { x: qx + qs + 5, y: Y(qtop + 40), size: 13, font: helB });
+
+  // ---- "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
+  const relabel = (page, x0, x1, y0, y1, fs, lineEnd, value) => {
+    const base = H - (y0 + 0.8 * (y1 - y0));
+    page.drawRectangle({ x: x0 - 1.5, y: H - y1 - 1.5, width: x1 - x0 + 3, height: y1 - y0 + 3, color: rgb(1, 1, 1) });
+    page.drawText('Sample Card No', { x: x0, y: base, size: fs, font: cal, color: ink });
     const w = cal.widthOfTextAtSize('Sample Card No', fs);
-    page.drawLine({ start: { x: x0 + w + 1, y: base - 1.2 }, end: { x: lineEnd, y: base - 1.2 }, thickness: 0.45, color: rgb(0, 0, 0) });
+    page.drawLine({ start: { x: x0 + w + 1, y: base - 1.2 }, end: { x: lineEnd, y: base - 1.2 }, thickness: 0.45, color: ink });
+    if (value) page.drawText(value, { x: x0 + w + 4, y: base + 0.6, size: fs - 0.8, font: helB, color: ink });
   };
-  relabel(p1, 438.34, 545.3, 34.5, 47.5, 10.3, 549);
-  relabel(doc.getPage(1), 443.86, 508.0, 64.05, 74.6, 9.0, 534.3);
+  relabel(p1, 438.34, 545.3, 34.5, 47.5, 10.3, 549, jc);
+  relabel(doc.getPage(1), 443.86, 508.0, 64.05, 74.6, 9.0, 534.3, jc);
+
+  if (!blank) {
+    const r0 = rows[0], g = k => String(r0[k] ?? '').trim();
+    // text fitted to a width (font shrinks to 6pt), vertically centred on a row centre
+    const put = (text, x, cy, maxW, { size = 8.5, align = 'left', font = helB } = {}) => {
+      text = String(text ?? '').trim(); if (!text) return;
+      while (size > 6 && font.widthOfTextAtSize(text, size) > maxW) size -= 0.25;
+      const w = font.widthOfTextAtSize(text, size);
+      const x1 = align === 'center' ? x - w / 2 : x;
+      p1.drawText(text, { x: x1, y: Y(cy) - size * 0.35, size, font, color: ink });
+    };
+    const tick = (cx, cy) => {                                  // check mark inside a box
+      p1.drawLine({ start: { x: cx - 3.4, y: Y(cy) - 0.2 }, end: { x: cx - 0.9, y: Y(cy) - 3.2 }, thickness: 1.5, color: ink });
+      p1.drawLine({ start: { x: cx - 0.9, y: Y(cy) - 3.2 }, end: { x: cx + 3.8, y: Y(cy) + 3.6 }, thickness: 1.5, color: ink });
+    };
+    const ring = (x0, x1, cy) => p1.drawEllipse({ x: (x0 + x1) / 2, y: Y(cy), xScale: (x1 - x0) / 2 + 2, yScale: 6, borderColor: ink, borderWidth: 1 });
+    const unit = (v) => String(v || '').trim().toUpperCase().replace(/^PCS$/, 'PC');
+
+    // header
+    const d = g('Recd Date'); put(d, 118, 42.4, 40, { size: 9 });
+    const ncol = rows.length; put(String(ncol), 497, 63.3, 50, { size: 9 });
+
+    // vendor block
+    put(g('Fabric Vendor'), 112, 105.3, 300);
+    put(g('Fabric Design No'), 112, 128.3, 92);
+    put(g('Fabric Quality'), 260, 128.3, 116);
+    put(uniq(rows.map(r => r['Fabric Colour Name'])).join(' / '), 112, 151.3, 92);
+    put(uniq(rows.map(r => r['Fabric Colour No'])).join(' / '), 260, 151.3, 116);
+
+    // fabric table: [row centre, key prefix, unit key, unit word boxes]
+    const COL = { type: 209.5, quality: 254, width: 299.5, mtr: 340.4, rate: 383.1 };
+    const cells = (cy, k) => {
+      put(g(k.type), COL.type, cy, 38, { align: 'center', size: 8 });
+      put(g(k.quality), COL.quality, cy, 48, { align: 'center', size: 8 });
+      put(g(k.width), COL.width, cy, 38, { align: 'center' });
+      put(g(k.mtr), COL.mtr, cy, 38, { align: 'center' });
+      put(g(k.rate), COL.rate, cy, 40, { align: 'center' });
+    };
+    const f1 = { type: 'Fabric 1 Type', quality: 'Fabric 1 Quality', width: 'Fabric 1 Width', mtr: 'Fabric 1 Mtr', rate: 'Fabric 1 Rate' };
+    const f2 = { type: 'Fabric 2 Type', quality: 'Fabric 2 Quality', width: 'Fabric 2 Width', mtr: 'Fabric 2 Mtr', rate: 'Fabric 2 Rate' };
+    cells(205.3, f1); cells(228.3, f2);
+    const dp = { quality: 'DP Quality', width: 'Dp Width', mtr: 'Dp Fabric Mtr', rate: 'Dp Rate' };
+    cells(251.5, dp);
+    cells(274.6, { quality: 'Pant Quality', width: 'Pant Width', mtr: 'Pant Fabric Mtr', rate: 'Pant Rate' });
+    // unit: circle PC or MTR
+    const un = (v, cy, pc, mtr) => { const u2 = unit(v); if (u2 === 'PC') ring(pc[0], pc[1], cy); else if (u2 === 'MTR') ring(mtr[0], mtr[1], cy); };
+    un(g('Fabric 1 Unit'), 205.3, [146.9, 157.1], [163.1, 181.3]);
+    un(g('Fabric 2 Unit'), 228.3, [146.9, 157.1], [163.1, 181.3]);
+    un(g('Dp Unit'), 251.5, [144.9, 155.1], [161.1, 179.2]);
+    // Dupatta / Pant yes-no boxes
+    const yn = (v, cy, bx) => { const t = String(v || '').trim().toLowerCase(); if (t === 'yes') tick(bx[0], cy); else if (t === 'no') tick(bx[1], cy); };
+    yn(g('Dupatta'), 251.9, [109.2, 128.8]); yn(g('Pant'), 274.4, [109.5, 130]);
+
+    // trims: left = DL SL RN PL (MTR, RATE); right = SS EX ACC 1-3 (Type, MTR, RATE)
+    const L = [['DL', 342.7, 'DL'], ['SL', 364.2, 'SL'], ['RN', 385.8, 'RN'], ['PL', 407.4, 'PL']];
+    L.forEach(([k, cy]) => { put(g(k + ' Mtr'), 139.8, cy, 34, { align: 'center' }); put(g(k + ' Rate'), 179, cy, 38, { align: 'center' });
+      if (g(k + ' Received').toLowerCase() === 'yes') tick(126, cy); });
+    const R = [['SS', 342.7], ['EX ACC 1', 364.2], ['EX ACC 2', 385.8], ['EX ACC 3', 407.4]];
+    R.forEach(([k, cy]) => { put(g(k + ' Type'), 281.5, cy, 38, { align: 'center', size: 8 }); put(g(k + ' Mtr'), 321.5, cy, 38, { align: 'center' }); put(g(k + ' Rate'), 366.5, cy, 46, { align: 'center' });
+      if (g(k + ' Received').toLowerCase() === 'yes') tick(256.5, cy); });
+
+    // fabric remark -> the Remark box on the right
+    const rem = g('Fabric Remark');
+    if (rem) {
+      const words = rem.split(/\s+/); let line = ''; let y = 474; const lines = [];
+      words.forEach(w => { const t = line ? line + ' ' + w : w; if (hel.widthOfTextAtSize(t, 8) > 138) { lines.push(line); line = w; } else line = t; });
+      if (line) lines.push(line);
+      lines.slice(0, 9).forEach(l => { p1.drawText(l, { x: 417, y: Y(y), size: 8, font: hel, color: ink }); y += 11; });
+    }
+  }
+
   const bytes = await doc.save();
   res.setHeader('content-type', 'application/pdf'); res.setHeader('content-disposition', `inline; filename="sampling-card-${jc}.pdf"`);
+  res.setHeader('cache-control', 'no-store');
   res.end(Buffer.from(bytes));
 };
