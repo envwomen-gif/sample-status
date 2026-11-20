@@ -1,0 +1,7 @@
+{
+  "rewrites": [
+    { "source": "/pdf/:jc", "destination": "/api/pdf?jc=:jc" },
+    { "source": "/:jc", "destination": "/api/card?jc=:jc" }
+  ],
+  "functions": { "api/pdf.js": { "includeFiles": "assets/**" } }
+}
