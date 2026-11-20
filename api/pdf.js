@@ -34,37 +34,26 @@ module.exports = async (req, res) => {
   const ink = rgb(0, 0, 0);
   const Y = top => H - top;                                    // top-based y (as pdftotext) -> PDF y
 
-  // ---- page 1 header box: the QR replaces the printed "JC No / No of Colors" lines (box x 430.8-558, top 30.6-78.6) ----
+  // ---- header box on both pages (printed "JC No / No of Colors" box is wiped and replaced) ----
   const png = await QR.toBuffer(`${base}/${jc}`, { errorCorrectionLevel: 'M', margin: 0, scale: 12, type: 'png' });
   const img = await doc.embedPng(png);
-  const bx = 430.8, bw = 127.2, btop = 30.6;                  // printed box = x430.8-558, top 30.6-78.6
-  p1.drawRectangle({ x: bx - 1, y: Y(btop + 50), width: bw + 2, height: 52, color: rgb(1, 1, 1) });   // wipe the printed box and its lines
-  const bs = 70;                                               // new box = the QR frame (square)
-  p1.drawRectangle({ x: bx, y: Y(btop + bs), width: bs, height: bs, borderColor: ink, borderWidth: 0.72, color: rgb(1, 1, 1) });
-  p1.drawImage(img, { x: bx + 5, y: Y(btop + bs - 5), width: bs - 10, height: bs - 10 });
-
-  // ---- Sample Card No: label + bold underlined value, right of the QR box ----
-  const sx = bx + bs + 7, sw = bx + bw - sx;
-  p1.drawText('Sample Card No', { x: sx, y: Y(btop + 24), size: 7.6, font: cal, color: ink });
-  p1.drawText(jc, { x: sx + 1, y: Y(btop + 40) + 1, size: 12, font: helB, color: ink });
-  p1.drawLine({ start: { x: sx, y: Y(btop + 40) }, end: { x: sx + sw, y: Y(btop + 40) }, thickness: 1, color: ink });
-
-  // ---- No of Colors: below the box ----
-  const ny = Y(btop + bs + 18), nl = 'No of Colors', nlw = cal.widthOfTextAtSize(nl, 9.5);
-  p1.drawText(nl, { x: bx, y: ny, size: 9.5, font: cal, color: ink });
-  if (!blank) p1.drawText(String(rows.length), { x: bx + nlw + 8, y: ny + 0.5, size: 11, font: helB, color: ink });
-  p1.drawLine({ start: { x: bx + nlw + 4, y: ny - 1.8 }, end: { x: bx + bw, y: ny - 1.8 }, thickness: 1, color: ink });
-
-  // ---- page 2: "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
-  const relabel = (page, x0, x1, y0, y1, fs, lineEnd, value) => {
-    const base = H - (y0 + 0.8 * (y1 - y0));
-    page.drawRectangle({ x: x0 - 1.5, y: H - y1 - 1.5, width: x1 - x0 + 3, height: y1 - y0 + 3, color: rgb(1, 1, 1) });
-    page.drawText('Sample Card No', { x: x0, y: base, size: fs, font: cal, color: ink });
-    const w = cal.widthOfTextAtSize('Sample Card No', fs);
-    page.drawLine({ start: { x: x0 + w + 1, y: base - 1.2 }, end: { x: lineEnd, y: base - 1.2 }, thickness: 0.45, color: ink });
-    if (value) page.drawText(value, { x: x0 + w + 4, y: base + 0.6, size: fs - 0.8, font: helB, color: ink });
+  // same header on both pages: QR in a square frame, "Sample Card No" beside it, "No of Colors" below
+  const header = (page, btop, wipeTop, wipeH) => {
+    const bx = 430.8, bw = 127.2, bs = 70;
+    page.drawRectangle({ x: bx - 1, y: Y(wipeTop + wipeH), width: bw + 2, height: wipeH, color: rgb(1, 1, 1) });   // wipe the printed box and its lines
+    page.drawRectangle({ x: bx, y: Y(btop + bs), width: bs, height: bs, borderColor: ink, borderWidth: 0.72, color: rgb(1, 1, 1) });
+    page.drawImage(img, { x: bx + 5, y: Y(btop + bs - 5), width: bs - 10, height: bs - 10 });
+    const sx = bx + bs + 7, sw = bx + bw - sx;
+    page.drawText('Sample Card No', { x: sx, y: Y(btop + 24), size: 7.6, font: cal, color: ink });
+    page.drawText(jc, { x: sx + 1, y: Y(btop + 40) + 1, size: 12, font: helB, color: ink });
+    page.drawLine({ start: { x: sx, y: Y(btop + 40) }, end: { x: sx + sw, y: Y(btop + 40) }, thickness: 1, color: ink });
+    const ny = Y(btop + bs + 18), nl = 'No of Colors', nlw = cal.widthOfTextAtSize(nl, 9.5);
+    page.drawText(nl, { x: bx, y: ny, size: 9.5, font: cal, color: ink });
+    if (!blank) page.drawText(String(rows.length), { x: bx + nlw + 8, y: ny + 0.5, size: 11, font: helB, color: ink });
+    page.drawLine({ start: { x: bx + nlw + 4, y: ny - 1.8 }, end: { x: bx + bw, y: ny - 1.8 }, thickness: 1, color: ink });
   };
-  relabel(doc.getPage(1), 443.86, 508.0, 64.05, 74.6, 9.0, 534.3, jc);
+  header(p1, 30.6, 29.1, 52);          // page 1: printed box top 30.6-78.6
+  header(doc.getPage(1), 56, 59, 46);  // page 2: printed box top 60.2-103.4 (x436.3-558.1)
 
   if (!blank) {
     const r0 = rows[0], g = k => String(r0[k] ?? '').trim();
