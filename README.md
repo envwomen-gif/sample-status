@@ -10,7 +10,7 @@ Read-only page that shows the paper sampling card (COST BREAKUP v6) filled from 
 | Name | Value |
 |---|---|
 | `SHEET_ID` | ID of the SAMPLE MASTER spreadsheet |
-| `GOOGLE_SERVICE_ACCOUNT` | Service account JSON key. Share the sheet with its `client_email` as Viewer. |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Service account JSON key. Share the sheet with its `client_email` as Viewer. |
 | `PUBLIC_BASE_URL` | Optional. Site URL printed in the QR. Default: the host that serves `/pdf/<JC>`. |
 
 The sheet is read by header name (row 3 of `SAMPLE MASTER`). A repeated header gets `@2` for the second copy, for example the cost table `Fabric 1 Type@2`. Do not rename headers.
