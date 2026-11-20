@@ -39,19 +39,19 @@ module.exports = async (req, res) => {
   const img = await doc.embedPng(png);
   const bx = 430.8, bw = 127.2, btop = 30.6, bh = 48;
   p1.drawRectangle({ x: bx + 1, y: Y(btop + bh) + 1, width: bw - 2, height: bh - 2, color: rgb(1, 1, 1) });
-  const qs = 42;
-  p1.drawImage(img, { x: bx + (bw - qs) / 2, y: Y(btop + (bh + qs) / 2), width: qs, height: qs });
+  const qs = 40, qx = bx + 4;
+  p1.drawImage(img, { x: qx, y: Y(btop + (bh + qs) / 2), width: qs, height: qs });
 
-  // ---- Sample Card No and No of Colors under the box: label + bold underlined value ----
+  // ---- Sample Card No and No of Colors inside the box, right of the QR: small label, bold underlined value ----
+  const fx = qx + qs + 7, fw = bx + bw - 5 - fx;
   const field = (label, value, top) => {
-    const size = 10.5, base = Y(top), x = bx;
-    p1.drawText(label, { x, y: base, size, font: cal, color: ink });
-    const lw = cal.widthOfTextAtSize(label, size) + 5, vw = Math.max(helB.widthOfTextAtSize(String(value || ''), 11.5), 44);
-    if (value) p1.drawText(String(value), { x: x + lw + 2, y: base, size: 11.5, font: helB, color: ink });
-    p1.drawLine({ start: { x: x + lw, y: base - 2 }, end: { x: x + lw + vw + 4, y: base - 2 }, thickness: 1, color: ink });
+    p1.drawText(label, { x: fx, y: Y(btop + top), size: 8, font: cal, color: ink });
+    const vb = Y(btop + top + 12);
+    if (value) p1.drawText(String(value), { x: fx + 2, y: vb + 1.5, size: 10.5, font: helB, color: ink });
+    p1.drawLine({ start: { x: fx, y: vb }, end: { x: fx + fw, y: vb }, thickness: 1, color: ink });
   };
-  field('Sample Card No', jc, 96);
-  field('No of Colors', blank ? '' : String(rows.length), 114);
+  field('Sample Card No', jc, 11);
+  field('No of Colors', blank ? '' : String(rows.length), 33);
 
   // ---- page 2: "JC No" -> "Sample Card No" (white patch over the printed text, same line style) ----
   const relabel = (page, x0, x1, y0, y1, fs, lineEnd, value) => {
